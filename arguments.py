@@ -10,7 +10,7 @@ class ModelArguments:
     """
 
     model_name_or_path: str = field(
-        default="klue/bert-base",
+        default="klue/roberta-large",
         metadata={
             "help": "Path to pretrained model or model identifier from huggingface.co/models"
         },
@@ -95,11 +95,11 @@ class DataTrainingArguments:
 train_args = TrainingArguments(
     do_train=True,
     do_eval=True,
-    output_dir="./finetune/",
+    output_dir="./finetune/roberta-large",
     overwrite_output_dir=True,
     evaluation_strategy="steps",
-    per_device_train_batch_size=32,
-    per_device_eval_batch_size=32,
+    per_device_train_batch_size=16,
+    per_device_eval_batch_size=16,
     gradient_accumulation_steps=2,
     learning_rate=1e-5,
     num_train_epochs=8,
