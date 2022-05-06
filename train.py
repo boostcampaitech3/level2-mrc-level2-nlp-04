@@ -17,6 +17,8 @@ from transformers import (
 )
 from utils_qa import check_no_error, postprocess_qa_predictions
 from transformers.utils import logging as tlogging
+from knockknock import slack_sender
+from slack_info import *
 
 tlogging.set_verbosity_error()
 logger = logging.getLogger(__name__)
@@ -89,7 +91,7 @@ def main():
     if training_args.do_train or training_args.do_eval:
         run_mrc(data_args, training_args, model_args, datasets, tokenizer, model)
 
-
+@slack_sender(webhook_url=webhook_url, channel=channel_id, user_mentions=[user_id])
 def run_mrc(
     data_args: DataTrainingArguments,
     training_args: TrainingArguments,

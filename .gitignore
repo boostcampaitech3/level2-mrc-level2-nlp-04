@@ -8,6 +8,7 @@
 .ipynb_checkpoints
 */.ipynb_checkpoints/*
 
+slack_info.py
 eval/
 output/
 finetune*
