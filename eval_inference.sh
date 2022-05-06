@@ -3,5 +3,5 @@
 python inference.py \
 --output_dir="./eval" \
 --model_name_or_path="./finetune/" \
---dataset_name="../data/train_data" \
+--dataset_name="../data/train_dataset" \
 --do_eval
