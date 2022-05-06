@@ -2,8 +2,7 @@ import logging
 import os
 import sys
 from typing import NoReturn
-
-from arguments import DataTrainingArguments, ModelArguments
+from arguments import DataTrainingArguments, ModelArguments, train_args
 from datasets import DatasetDict, load_from_disk, load_metric
 from trainer_qa import QuestionAnsweringTrainer
 from transformers import (
@@ -17,42 +16,44 @@ from transformers import (
     set_seed,
 )
 from utils_qa import check_no_error, postprocess_qa_predictions
+from transformers.utils import logging as tlogging
 
+tlogging.set_verbosity_error()
 logger = logging.getLogger(__name__)
-
 
 def main():
     # 가능한 arguments 들은 ./arguments.py 나 transformer package 안의 src/transformers/training_args.py 에서 확인 가능합니다.
     # --help flag 를 실행시켜서 확인할 수 도 있습니다.
 
     parser = HfArgumentParser(
-        (ModelArguments, DataTrainingArguments, TrainingArguments)
+        (ModelArguments, DataTrainingArguments)
     )
-    model_args, data_args, training_args = parser.parse_args_into_dataclasses()
-    print(model_args.model_name_or_path)
+    model_args, data_args = parser.parse_args_into_dataclasses()
+    training_args = train_args
+    print(f"Pretrained Model = {model_args.model_name_or_path}", end="\n\n")
 
     # [참고] argument를 manual하게 수정하고 싶은 경우에 아래와 같은 방식을 사용할 수 있습니다
     # training_args.per_device_train_batch_size = 4
     # print(training_args.per_device_train_batch_size)
 
-    print(f"model is from {model_args.model_name_or_path}")
     print(f"data is from {data_args.dataset_name}")
 
     # logging 설정
     logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s -    %(message)s",
+        format="%(asctime)s - %(levelname)s - %(name)s\n%(message)s\n",
         datefmt="%m/%d/%Y %H:%M:%S",
         handlers=[logging.StreamHandler(sys.stdout)],
     )
 
     # verbosity 설정 : Transformers logger의 정보로 사용합니다 (on main process only)
     logger.info("Training/evaluation parameters %s", training_args)
-
+     
     # 모델을 초기화하기 전에 난수를 고정합니다.
     set_seed(training_args.seed)
 
     datasets = load_from_disk(data_args.dataset_name)
-    print(datasets)
+    print(f"Train Dataset Length : {len(datasets['train'])}")
+    print(f"Validation Dataset Length : {len(datasets['validation'])}")
 
     # AutoConfig를 이용하여 pretrained model 과 tokenizer를 불러옵니다.
     # argument로 원하는 모델 이름을 설정하면 옵션을 바꿀 수 있습니다.
@@ -77,11 +78,11 @@ def main():
     )
 
     print(
-        type(training_args),
-        type(model_args),
-        type(datasets),
-        type(tokenizer),
-        type(model),
+        f"Training Args type : {type(training_args)}",
+        f"Datasets type : {type(datasets)}",
+        f"Tokenizer type : {type(tokenizer)}",
+        f"Model type : {type(model)}",
+        sep="\n", end="\n\n"
     )
 
     # do_train mrc model 혹은 do_eval mrc model
@@ -297,7 +298,12 @@ def run_mrc(
     metric = load_metric("squad")
 
     def compute_metrics(p: EvalPrediction):
-        return metric.compute(predictions=p.predictions, references=p.label_ids)
+        result =  metric.compute(predictions=p.predictions, references=p.label_ids)
+        result["eval_exact_match"] = result["exact_match"]
+        del result["exact_match"]
+        result["eval_f1"] = result["f1"]
+        del result["f1"]
+        return result
 
     # Trainer 초기화
     trainer = QuestionAnsweringTrainer(
