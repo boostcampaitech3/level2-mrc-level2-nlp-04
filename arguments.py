@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from typing import Optional
+from transformers import TrainingArguments
 
 
 @dataclass
@@ -9,7 +10,7 @@ class ModelArguments:
     """
 
     model_name_or_path: str = field(
-        default="klue/bert-base",
+        default="klue/roberta-large",
         metadata={
             "help": "Path to pretrained model or model identifier from huggingface.co/models"
         },
@@ -90,3 +91,26 @@ class DataTrainingArguments:
     use_faiss: bool = field(
         default=False, metadata={"help": "Whether to build with faiss"}
     )
+
+train_args = TrainingArguments(
+    do_train=True,
+    do_eval=True,
+    output_dir="./finetune/roberta-large",
+    overwrite_output_dir=True,
+    evaluation_strategy="steps",
+    per_device_train_batch_size=16,
+    per_device_eval_batch_size=16,
+    gradient_accumulation_steps=2,
+    learning_rate=1e-5,
+    num_train_epochs=8,
+    warmup_ratio=0.1,
+    logging_strategy="steps",
+    logging_steps=100,
+    save_strategy="steps",
+    save_steps=200,
+    save_total_limit=1,
+    seed=42,
+    eval_steps=200,
+    metric_for_best_model="exact_match",
+    load_best_model_at_end=True,
+)
