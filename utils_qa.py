@@ -94,11 +94,13 @@ def postprocess_qa_predictions(
         is_world_process_zero (:obj:`bool`, `optional`, defaults to :obj:`True`):
             이 프로세스가 main process인지 여부(logging/save를 수행해야 하는지 여부를 결정하는 데 사용됨)
     """
+    # (study) prediction으로 들어오는 값이 튜플 형태로 start, end 위치를 반환하지 못할 경우 assert 발생시킴
     assert (
         len(predictions) == 2
     ), "`predictions` should be a tuple with two elements (start_logits, end_logits)."
     all_start_logits, all_end_logits = predictions
 
+    # (study) 아마도 prediction이 리스트 형태로 들어오나 봄. [[all_start_logits], [all_end_logits]] 형태로..?
     assert len(predictions[0]) == len(
         features
     ), f"Got {len(predictions[0])} predictions and {len(features)} features."
@@ -106,6 +108,8 @@ def postprocess_qa_predictions(
     # example과 mapping되는 feature 생성
     example_id_to_index = {k: i for i, k in enumerate(examples["id"])}
     features_per_example = collections.defaultdict(list)
+    # (study) collection.default(list) 를 하게 되면 딕셔러니의 키에 대응되는 value값이 없더라도 list의 append가 가능함.
+    # (study) 하나의 example에 feature(전처리된) 데이터 셋을 매핑시켜주는 (이전에 context 길이가 넘어가면 잘라주던 것을 매핑시켜줌)
     for i, feature in enumerate(features):
         features_per_example[example_id_to_index[feature["example_id"]]].append(i)
 
@@ -124,6 +128,7 @@ def postprocess_qa_predictions(
     # 전체 example들에 대한 main Loop
     for example_index, example in enumerate(tqdm(examples)):
         # 해당하는 현재 example index
+        # (study) feature_indices가 하나 이상일 수도 있음.
         feature_indices = features_per_example[example_index]
 
         min_null_prediction = None
@@ -131,7 +136,7 @@ def postprocess_qa_predictions(
 
         # 현재 example에 대한 모든 feature 생성합니다.
         for feature_index in feature_indices:
-            # 각 featureure에 대한 모든 prediction을 가져옵니다.
+            # 각 feature에 대한 모든 prediction을 가져옵니다.
             start_logits = all_start_logits[feature_index]
             end_logits = all_end_logits[feature_index]
             # logit과 original context의 logit을 mapping합니다.
@@ -318,18 +323,29 @@ def check_no_error(
 ) -> Tuple[Any, int]:
 
     # last checkpoint 찾기.
+    # (study) os.path.isdir : 디렉토리 존재 유무를 boolean 형태로 반환함.
+    # (study) training_args.overwrite_output_dir : True로 하게 되면, 출력 디렉토리를 덮어쓰게 됨.
+    # (study) default = {traing_args.do_train : False,
+    #                    training_args.output_dir : 없음. 모델을 돌릴 때 command line으로 넣어줘야 함)
+    #                    training_args.overwrite_output_dir : False}
     last_checkpoint = None
     if (
+        # # (study) output_dir 안에 디렉토리가 존재하면서, do_train이 True 이고, 덮어쓰지 않는다면?(overwrite_output_dir = False)
         os.path.isdir(training_args.output_dir)
         and training_args.do_train
         and not training_args.overwrite_output_dir
     ):
+        # (study) 마지막에 저장된 model checkpoint를 불러온다.
         last_checkpoint = get_last_checkpoint(training_args.output_dir)
+
+        # (study) os.listdir : 디렉토리 내의 모든 파일과 디렉토리의 리스트를 반환함.
+        # (study) last_checkpoint가 없는 경우(checkpoint는 없는데 다른 파일은 존재하는 경우)
         if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
             raise ValueError(
                 f"Output directory ({training_args.output_dir}) already exists and is not empty. "
                 "Use --overwrite_output_dir to overcome."
             )
+        # (study) last_checkpoint가 있는 경우
         elif last_checkpoint is not None:
             logger.info(
                 f"Checkpoint detected, resuming training at {last_checkpoint}. To avoid this behavior, change "
@@ -337,6 +353,7 @@ def check_no_error(
             )
 
     # Tokenizer check: 해당 script는 Fast tokenizer를 필요로합니다.
+    # (study) tokenizer는 가능하면, transformer 라이브러리를 통해 구현된 것을 사용하기 위함.
     if not isinstance(tokenizer, PreTrainedTokenizerFast):
         raise ValueError(
             "This example script only works for models that have a fast tokenizer. Checkout the big table of models "
@@ -344,6 +361,8 @@ def check_no_error(
             "requirement"
         )
 
+    # (study) 토크나이저가 받아 들일 수 있는 최대 길이보다 데이터의 최대 길이가 더 길면 warning 로그를 남김.
+    # (study) min을 사용하여 데이터의 max_seq_lenght를 토크나이저가 최대로 받아들일 수 있는 길이를 넘지 않도록 설정함.
     if data_args.max_seq_length > tokenizer.model_max_length:
         logger.warn(
             f"The max_seq_length passed ({data_args.max_seq_length}) is larger than the maximum length for the"
@@ -351,6 +370,7 @@ def check_no_error(
         )
     max_seq_length = min(data_args.max_seq_length, tokenizer.model_max_length)
 
+    # (study) datasets에는 기본적으로 validation이 있음. column_names 할 때 따로 분리해서 지정하는 것일 뿐
     if "validation" not in datasets:
         raise ValueError("--do_eval requires a validation dataset")
     return last_checkpoint, max_seq_length

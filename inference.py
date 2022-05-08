@@ -89,7 +89,10 @@ def main():
     # True일 경우 : run passage retrieval
     if data_args.eval_retrieval:
         datasets = run_sparse_retrieval(
-            tokenizer.tokenize, datasets, training_args, data_args,
+            tokenizer.tokenize,
+            datasets,
+            training_args,
+            data_args,
         )
 
     # eval or predict mrc model
