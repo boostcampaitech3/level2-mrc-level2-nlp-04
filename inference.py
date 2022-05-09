@@ -46,6 +46,9 @@ def main():
     )
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
+    # (study) default = {training_args.do_train : False.
+    #                    model_args.model_name_or_path: "klue/bert-base"
+    #                    data_args.dataset_name : "../data/train_dataset"}
     training_args.do_train = True
 
     print(f"model is from {model_args.model_name_or_path}")
@@ -62,8 +65,12 @@ def main():
     logger.info("Training/evaluation parameters %s", training_args)
 
     # 모델을 초기화하기 전에 난수를 고정합니다.
+    # (study) default = {training_args.seed: 42}
     set_seed(training_args.seed)
 
+    # (study) 데이터셋을 로드합니다.
+    # (study) default = {data_args.dataset_name : "../data/train_dataset"}
+    # (study) load_from_disk 반환 타입 : ``datasets.Dataset`` or ``datasets.DatasetDict``
     datasets = load_from_disk(data_args.dataset_name)
     print(datasets)
 
@@ -87,6 +94,7 @@ def main():
     )
 
     # True일 경우 : run passage retrieval
+    # (study) default = {data_args.eval_retrieval : True}
     if data_args.eval_retrieval:
         datasets = run_sparse_retrieval(
             tokenizer.tokenize,
@@ -96,6 +104,8 @@ def main():
         )
 
     # eval or predict mrc model
+    # (study) default = {training_args.do_eval : None,
+    #                    training_args.do_predict : False}
     if training_args.do_eval or training_args.do_predict:
         run_mrc(data_args, training_args, model_args, datasets, tokenizer, model)
 
