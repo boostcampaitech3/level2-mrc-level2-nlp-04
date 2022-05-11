@@ -22,6 +22,8 @@ from transformers.utils import logging as tlogging
 from knockknock import slack_sender
 from slack_info import *
 import json
+from tqdm import tqdm
+import re
 
 tlogging.set_verbosity_error()
 logger = logging.getLogger(__name__)
@@ -47,6 +49,35 @@ class ToDatasets:
             temp_data["answer"] = temp_answer
             result.append(temp_data)
         return result
+
+
+def preprocess(text):
+    text = re.sub(r'\n', ' ', text)
+    text = re.sub(r"\\n", " ", text)
+    text = re.sub(r'#', ' ', text)
+    text = re.sub(r"\s+", " ", text)
+    text = re.sub(r"[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣぁ-ゔァ-ヴー々〆〤一-龥<>()\s\.\?!》《≪≫\'<>〈〉:‘’%,『』「」＜＞・\"-“”∧]", "", text)
+    return text
+
+
+def run_preprocess(data_dict):
+    context = data_dict["context"]
+    start_ids = data_dict["answers"]["answer_start"][0]
+
+    before = data_dict["context"][:start_ids]
+    after = data_dict["context"][start_ids:]
+
+    process_before = preprocess(before)
+    process_after = preprocess(after)
+    process_data = process_before + process_after
+
+    ids_move = len(before) - len(process_before)
+
+    data_dict["context"] = process_data
+    data_dict["answers"]["answer_start"][0] = start_ids - ids_move
+
+    return data_dict
+
 
 def main():
     # 가능한 arguments 들은 ./arguments.py 나 transformer package 안의 src/transformers/training_args.py 에서 확인 가능합니다.
@@ -74,7 +105,7 @@ def main():
 
     # verbosity 설정 : Transformers logger의 정보로 사용합니다 (on main process only)
     logger.info("Training/evaluation parameters %s", training_args)
-     
+
     # 모델을 초기화하기 전에 난수를 고정합니다.
     set_seed(training_args.seed)
 
@@ -103,17 +134,46 @@ def main():
             document_id_list.append(temp_data["document_id"])
 
     aihub_dataset = Dataset.from_dict({"title": title_list,
-                                        "context": context_list,
-                                        "question": question_list,
-                                        "id": id_list,
-                                        "answers": answer_list,
-                                        "document_id": document_id_list,
-                                        "__index_level_0__":document_id_list})
+                                       "context": context_list,
+                                       "question": question_list,
+                                       "id": id_list,
+                                       "answers": answer_list,
+                                       "document_id": document_id_list,
+                                       "__index_level_0__": document_id_list})
     aihub_dataset = aihub_dataset.cast(merge_vanila_dataset.features)
     aihub_dataset.save_to_disk("aihub_train_dataset")
     aihub_dataset = datasets.load_from_disk("aihub_train_dataset")
     merge_datasets = concatenate_datasets([aihub_dataset, merge_vanila_dataset])
-    split_dataset = merge_datasets.train_test_split(test_size=0.1)
+
+    title_list = []
+    context_list = []
+    quesion_list = []
+    id_list = []
+    answers_list = []
+    document_id_list = []
+    index_level_list = []
+
+    for data in tqdm(merge_datasets):
+        new_data = run_preprocess(data)
+        title_list.append(new_data['title'])
+        context_list.append(new_data['context'])
+        quesion_list.append(new_data['question'])
+        id_list.append(new_data['id'])
+        answers_list.append(new_data['answers'])
+        document_id_list.append(new_data['document_id'])
+        index_level_list.append(new_data['__index_level_0__'])
+
+    merge_datasets_processed = Dataset.from_dict({"title": title_list,
+                                        "context": context_list,
+                                        "question": quesion_list,
+                                        "id": id_list,
+                                        "answers": answers_list,
+                                        "document_id": document_id_list,
+                                        "__index_level_0__": index_level_list})
+
+
+
+    split_dataset = merge_datasets_processed.train_test_split(test_size=0.1)
 
     aihub_train_valid_dataset = DatasetDict({
         'train': split_dataset['train'],
@@ -157,16 +217,16 @@ def main():
     if training_args.do_train or training_args.do_eval:
         run_mrc(data_args, training_args, model_args, aihub_train_valid_dataset, tokenizer, model)
 
+
 @slack_sender(webhook_url=webhook_url, channel=channel_id, user_mentions=[user_id])
 def run_mrc(
-    data_args: DataTrainingArguments,
-    training_args: TrainingArguments,
-    model_args: ModelArguments,
-    datasets: DatasetDict,
-    tokenizer,
-    model,
+        data_args: DataTrainingArguments,
+        training_args: TrainingArguments,
+        model_args: ModelArguments,
+        datasets: DatasetDict,
+        tokenizer,
+        model,
 ) -> NoReturn:
-
     # dataset을 전처리합니다.
     # training과 evaluation에서 사용되는 전처리는 아주 조금 다른 형태를 가집니다.
     if training_args.do_train:
@@ -199,7 +259,7 @@ def run_mrc(
             stride=data_args.doc_stride,
             return_overflowing_tokens=True,
             return_offsets_mapping=True,
-            return_token_type_ids=False, # roberta모델을 사용할 경우 False, bert를 사용할 경우 True로 표기해야합니다.
+            return_token_type_ids=False,  # roberta모델을 사용할 경우 False, bert를 사용할 경우 True로 표기해야합니다.
             padding="max_length" if data_args.pad_to_max_length else False,
         )
 
@@ -245,8 +305,8 @@ def run_mrc(
 
                 # 정답이 span을 벗어났는지 확인합니다(정답이 없는 경우 CLS index로 label되어있음).
                 if not (
-                    offsets[token_start_index][0] <= start_char
-                    and offsets[token_end_index][1] >= end_char
+                        offsets[token_start_index][0] <= start_char
+                        and offsets[token_end_index][1] >= end_char
                 ):
                     tokenized_examples["start_positions"].append(cls_index)
                     tokenized_examples["end_positions"].append(cls_index)
@@ -254,8 +314,8 @@ def run_mrc(
                     # token_start_index 및 token_end_index를 answer의 끝으로 이동합니다.
                     # Note: answer가 마지막 단어인 경우 last offset을 따라갈 수 있습니다(edge case).
                     while (
-                        token_start_index < len(offsets)
-                        and offsets[token_start_index][0] <= start_char
+                            token_start_index < len(offsets)
+                            and offsets[token_start_index][0] <= start_char
                     ):
                         token_start_index += 1
                     tokenized_examples["start_positions"].append(token_start_index - 1)
@@ -291,7 +351,7 @@ def run_mrc(
             stride=data_args.doc_stride,
             return_overflowing_tokens=True,
             return_offsets_mapping=True,
-            return_token_type_ids=False, # roberta모델을 사용할 경우 False, bert를 사용할 경우 True로 표기해야합니다.
+            return_token_type_ids=False,  # roberta모델을 사용할 경우 False, bert를 사용할 경우 True로 표기해야합니다.
             padding="max_length" if data_args.pad_to_max_length else False,
         )
 
@@ -366,7 +426,7 @@ def run_mrc(
     metric = load_metric("squad")
 
     def compute_metrics(p: EvalPrediction):
-        result =  metric.compute(predictions=p.predictions, references=p.label_ids)
+        result = metric.compute(predictions=p.predictions, references=p.label_ids)
         result["eval_exact_match"] = result["exact_match"]
         del result["exact_match"]
         result["eval_f1"] = result["f1"]
