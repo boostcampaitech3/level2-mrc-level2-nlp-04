@@ -3,7 +3,8 @@ import os
 import sys
 from typing import NoReturn
 from arguments import DataTrainingArguments, ModelArguments, train_args
-from datasets import DatasetDict, load_from_disk, load_metric
+from datasets import DatasetDict, load_from_disk, load_metric, Dataset, concatenate_datasets
+import datasets
 from trainer_qa import QuestionAnsweringTrainer
 from transformers import (
     AutoConfig,
@@ -14,14 +15,38 @@ from transformers import (
     HfArgumentParser,
     TrainingArguments,
     set_seed,
+    EarlyStoppingCallback
 )
 from utils_qa import check_no_error, postprocess_qa_predictions
 from transformers.utils import logging as tlogging
 from knockknock import slack_sender
 from slack_info import *
+import json
 
 tlogging.set_verbosity_error()
 logger = logging.getLogger(__name__)
+
+
+class ToDatasets:
+    def __init__(self):
+        self.data = {}
+
+    def __call__(self, data, index_num):
+        self.data["title"] = data["title"]
+        self.data["context"] = data["paragraphs"][0]["context"]
+        self.data["document_id"] = 70000 + index_num
+        result = []
+
+        for temp_question in data["paragraphs"][0]["qas"]:
+            temp_data = self.data.copy()
+            temp_data["id"] = temp_question["id"]
+            temp_data["question"] = temp_question["question"]
+            temp_answer = {}
+            for k, v in temp_question["answers"][0].items():
+                temp_answer[k] = [v]
+            temp_data["answer"] = temp_answer
+            result.append(temp_data)
+        return result
 
 def main():
     # 가능한 arguments 들은 ./arguments.py 나 transformer package 안의 src/transformers/training_args.py 에서 확인 가능합니다.
@@ -53,10 +78,51 @@ def main():
     # 모델을 초기화하기 전에 난수를 고정합니다.
     set_seed(training_args.seed)
 
-    datasets = load_from_disk(data_args.dataset_name)
-    print(f"Train Dataset Length : {len(datasets['train'])}")
-    print(f"Validation Dataset Length : {len(datasets['validation'])}")
+    # < ai hub dataset 추가 > ###############################################################################################################
+    vanila_dataset = load_from_disk(data_args.dataset_name)
+    merge_vanila_dataset = concatenate_datasets([vanila_dataset['train'], vanila_dataset['validation']])
 
+    with open("/opt/ml/input/data/train_dataset/aihub/ko_nia_normal_squad_all.json", encoding="utf-8") as json_file:
+        json_data = json.load(json_file)
+
+    title_list = []
+    context_list = []
+    id_list = []
+    question_list = []
+    answer_list = []
+    document_id_list = []
+
+    for i in range(len(json_data["data"])):
+        temp_dataset = ToDatasets()
+        for temp_data in temp_dataset(json_data["data"][i], i):
+            id_list.append(temp_data["id"])
+            title_list.append(temp_data["title"])
+            context_list.append(temp_data["context"])
+            question_list.append(temp_data["question"])
+            answer_list.append(temp_data["answer"])
+            document_id_list.append(temp_data["document_id"])
+
+    aihub_dataset = Dataset.from_dict({"title": title_list,
+                                        "context": context_list,
+                                        "question": question_list,
+                                        "id": id_list,
+                                        "answers": answer_list,
+                                        "document_id": document_id_list,
+                                        "__index_level_0__":document_id_list})
+    aihub_dataset = aihub_dataset.cast(merge_vanila_dataset.features)
+    aihub_dataset.save_to_disk("aihub_train_dataset")
+    aihub_dataset = datasets.load_from_disk("aihub_train_dataset")
+    merge_datasets = concatenate_datasets([aihub_dataset, merge_vanila_dataset])
+    split_dataset = merge_datasets.train_test_split(test_size=0.1)
+
+    aihub_train_valid_dataset = DatasetDict({
+        'train': split_dataset['train'],
+        'validation': split_dataset['test']})
+
+    print(f"Train Dataset Length : {len(aihub_train_valid_dataset['train'])}")
+    print(f"Validation Dataset Length : {len(aihub_train_valid_dataset['validation'])}")
+
+    ##############################################################################
     # AutoConfig를 이용하여 pretrained model 과 tokenizer를 불러옵니다.
     # argument로 원하는 모델 이름을 설정하면 옵션을 바꿀 수 있습니다.
     config = AutoConfig.from_pretrained(
@@ -81,7 +147,7 @@ def main():
 
     print(
         f"Training Args type : {type(training_args)}",
-        f"Datasets type : {type(datasets)}",
+        f"Datasets type : {type(aihub_train_valid_dataset)}",
         f"Tokenizer type : {type(tokenizer)}",
         f"Model type : {type(model)}",
         sep="\n", end="\n\n"
@@ -89,7 +155,7 @@ def main():
 
     # do_train mrc model 혹은 do_eval mrc model
     if training_args.do_train or training_args.do_eval:
-        run_mrc(data_args, training_args, model_args, datasets, tokenizer, model)
+        run_mrc(data_args, training_args, model_args, aihub_train_valid_dataset, tokenizer, model)
 
 @slack_sender(webhook_url=webhook_url, channel=channel_id, user_mentions=[user_id])
 def run_mrc(
@@ -318,6 +384,8 @@ def run_mrc(
         data_collator=data_collator,
         post_process_function=post_processing_function,
         compute_metrics=compute_metrics,
+        callbacks=[EarlyStoppingCallback(early_stopping_patience=2)]
+
     )
 
     # Training
