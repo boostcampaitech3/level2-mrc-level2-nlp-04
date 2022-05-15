@@ -1,4 +1,4 @@
-# Readme
+# P Stage - MRC
 > Open-Domain Question Answering
 > MRC(기계독해)란 주어진 지문을 이해하고, 주어진 질의의 답변을 추론하는 프로젝트입니다.
 
