@@ -2,7 +2,7 @@
 > Open-Domain Question Answering
 > MRC(기계독해)란 주어진 지문을 이해하고, 주어진 질의의 답변을 추론하는 프로젝트입니다.
 
-![public 11th](https://img.shields.io/badge/Public%20LB-4th-yellow?style=for-the-badge&logo=appveyor) ![private 10th](https://img.shields.io/badge/Private%20LB-6th-yellow?style=for-the-badge&logo=appveyor)
+![public 11th](https://img.shields.io/badge/Public%20LB-11th-yellow?style=for-the-badge&logo=appveyor) ![private 10th](https://img.shields.io/badge/Private%20LB-10th-yellow?style=for-the-badge&logo=appveyor)
 
 <br>
 
