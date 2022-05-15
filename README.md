@@ -1,5 +1,26 @@
 # Readme
+> Open-Domain Question Answering
+> MRC(기계독해)란 주어진 지문을 이해하고, 주어진 질의의 답변을 추론하는 프로젝트입니다.
 
+![public 11th](https://img.shields.io/badge/Public%20LB-4th-yellow?style=for-the-badge&logo=appveyor) ![private 10th](https://img.shields.io/badge/Private%20LB-6th-yellow?style=for-the-badge&logo=appveyor)
+
+<br>
+
+## Wrap-Up Report
+
+
+<a href="https://inbeomi.notion.site/NLP-4-Wrap-Up-Report-0017d45a0de740468f91eb619f786302"><img src="https://upload.wikimedia.org/wikipedia/commons/4/45/Notion_app_logo.png" height=80 width=80px/></a>
+**Click logo**
+
+<br>
+<br>
+
+## Members
+김준석|서인범|송영준|심효은|정시현|
+:-:|:-:|:-:|:-:|:-:
+<img src='https://avatars.githubusercontent.com/u/71753257?v=4' height=80 width=80px></img>|<img src='https://avatars.githubusercontent.com/u/92137358?v=4' height=80 width=80px></img>|<img src='https://avatars.githubusercontent.com/u/55626702?v=4' height=80 width=80px></img>|<img src='https://avatars.githubusercontent.com/u/62679143?v=4' height=80 width=80px></img>|<img src='https://user-images.githubusercontent.com/46811558/157460704-6a5ac09f-fe71-4dd3-b30a-f2fa347b08d2.jpg' height=80 width=80px></img>
+[Github](https://github.com/junseok0408)|[Github](https://github.com/inbeomi)|[Github](https://github.com/addadda15)|[Github](https://github.com/hyoeun98)|[Github](https://github.com/jungsiroo)
+junseok0408@konkuk.ac.kr|inbeom0907@gmail.com|songjun5711@gmail.com|f2921641@gmail.com|sh2298@naver.com
 ## 소개
 
 P stage 3 대회를 위한 베이스라인 코드 
@@ -26,12 +47,19 @@ bash ./install/install_requirements.sh
 ./install/               # 요구사항 설치 파일 
 ./data/                  # 전체 데이터. 아래 상세 설명
 retrieval.py             # sparse retreiver 모듈 제공 
+dense_retrieval.py       # dense retreiver 모듈 제공
 arguments.py             # 실행되는 모든 argument가 dataclass 의 형태로 저장되어있음
 trainer_qa.py            # MRC 모델 학습에 필요한 trainer 제공.
 utils_qa.py              # 기타 유틸 함수 제공 
 
 train.py                 # MRC, Retrieval 모델 학습 및 평가 
 inference.py		     # ODQA 모델 평가 또는 제출 파일 (predictions.json) 생성
+
+eval_inference.sh        # inference eval 쉘 스크립트
+eval_reader.sh           # reader eval 쉘 스크립트
+predict_inference.sh     # inference predict 쉘 스크립트
+
+MRC_EDA.ipynb            # MRC data 탐색적 데이터 분석
 ```
 
 ## 데이터 소개
